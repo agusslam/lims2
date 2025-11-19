@@ -143,45 +143,46 @@
                         
                         <div class="col-md-4">
                             <form action="{{ route('samples.codify', $sample->id) }}" method="POST">
-                                @csrf
-                                
-                                <div class="mb-3">
-                                    <label class="form-label">Catatan Verifikasi</label>
-                                    <textarea class="form-control" name="verification_notes" 
-                                              rows="3" placeholder="Catatan verifikasi (opsional)"></textarea>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="meets_requirements" 
-                                               value="1" id="approve_{{ $sample->id }}" required>
-                                        <label class="form-check-label text-success" for="approve_{{ $sample->id }}">
-                                            <i class="fas fa-check me-1"></i>
-                                            Memenuhi Persyaratan
-                                        </label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="meets_requirements" 
-                                               value="0" id="reject_{{ $sample->id }}" required>
-                                        <label class="form-check-label text-danger" for="reject_{{ $sample->id }}">
-                                            <i class="fas fa-times me-1"></i>
-                                            Tidak Memenuhi Persyaratan
-                                        </label>
-                                    </div>
-                                </div>
-                                
-                                <div class="d-grid gap-2">
-                                    <button type="submit" class="btn btn-primary">
-                                        <i class="fas fa-qrcode me-2"></i>
-                                        Proses Kodifikasi
-                                    </button>
-                                    <a href="{{ route('samples.codification.report', $sample->id) }}" 
-                                       class="btn btn-outline-secondary" target="_blank">
-                                        <i class="fas fa-print me-2"></i>
-                                        Cetak Laporan
-                                    </a>
-                                </div>
-                            </form>
+    @csrf
+
+    <div class="mb-3">
+        <label class="form-label">Catatan Verifikasi</label>
+        <textarea class="form-control" name="codification_notes"
+                  rows="3" placeholder="Catatan verifikasi (opsional)"></textarea>
+    </div>
+
+    <div class="mb-3">
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="action"
+                   value="approve" id="approve_{{ $sample->id }}" required>
+            <label class="form-check-label text-success" for="approve_{{ $sample->id }}">
+                <i class="fas fa-check me-1"></i>
+                Memenuhi Persyaratan
+            </label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="action"
+                   value="reject" id="reject_{{ $sample->id }}" required>
+            <label class="form-check-label text-danger" for="reject_{{ $sample->id }}">
+                <i class="fas fa-times me-1"></i>
+                Tidak Memenuhi Persyaratan
+            </label>
+        </div>
+    </div>
+
+    <div class="d-grid gap-2">
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-qrcode me-2"></i>
+            Proses Kodifikasi
+        </button>
+        <a href="{{ route('samples.codification.report', $sample->id) }}"
+           class="btn btn-outline-secondary" target="_blank">
+            <i class="fas fa-print me-2"></i>
+            Cetak Laporan
+        </a>
+    </div>
+</form>
+
                         </div>
                     </div>
                 </div>
@@ -215,26 +216,48 @@ setInterval(function() {
     location.reload();
 }, 180000);
 
-// Form validation
+// Form validation — updated to match current form field names:
+// - radio name="action" with values "approve" or "reject"
+// - textarea name="codification_notes"
 document.querySelectorAll('form').forEach(form => {
     form.addEventListener('submit', function(e) {
-        const meetsRequirements = form.querySelector('input[name="meets_requirements"]:checked');
-        const notes = form.querySelector('textarea[name="verification_notes"]');
-        
-        if (!meetsRequirements) {
-            e.preventDefault();
-            alert('Silakan pilih apakah sampel memenuhi persyaratan atau tidak');
-            return false;
-        }
-        
-        if (meetsRequirements.value === '0' && !notes.value.trim()) {
-            if (!confirm('Anda menolak sampel tanpa catatan. Lanjutkan?')) {
+        try {
+            // Only validate forms that post to codify route to avoid interfering other forms
+            const actionUrl = form.getAttribute('action') || '';
+            if (!actionUrl.includes('/codify') && !actionUrl.includes('/process')) {
+                return; // skip validation for unrelated forms
+            }
+
+            const actionRadio = form.querySelector('input[name="action"]:checked');
+            const notes = form.querySelector('textarea[name="codification_notes"]');
+
+            if (!actionRadio) {
+                e.preventDefault();
+                alert('Silakan pilih apakah sampel memenuhi persyaratan atau tidak');
+                return false;
+            }
+
+            // if reject and no notes, warn user
+            if (actionRadio.value === 'reject' && (!notes || !notes.value.trim())) {
+                if (!confirm('Anda menolak sampel tanpa catatan. Lanjutkan?')) {
+                    e.preventDefault();
+                    return false;
+                }
+            }
+
+            // final confirmation
+            if (!confirm('Apakah Anda yakin dengan keputusan kodifikasi ini?')) {
                 e.preventDefault();
                 return false;
             }
+
+            // allow submit
+            return true;
+        } catch (err) {
+            // if any runtime JS error happens, do not block the form — allow submission
+            console.error('Validation script error:', err);
+            return true;
         }
-        
-        return confirm('Apakah Anda yakin dengan keputusan kodifikasi ini?');
     });
 });
 </script>

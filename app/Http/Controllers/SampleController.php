@@ -246,37 +246,6 @@ class SampleController extends Controller
             ->with('success', 'Permohonan sampel berhasil diarsipkan');
     }
 
-    /**
-     * Display registered samples for codification
-     */
-    // public function codification()
-    // {
-    //     // Check permission for Module 2
-    //     if (!Auth::user()->hasPermission(2)) {
-    //         abort(403, 'Unauthorized access to Codification');
-    //     }
-
-    //     $samples = Sample::with(['sampleType', 'parameters', 'registeredBy'])
-    //         ->where('status', 'registered')
-    //         ->orderBy('registered_at', 'desc')
-    //         ->paginate(20);
-
-    //     return view('codifications.index', compact('samples'));
-    // }
-
-    // /**
-    //  * Display codification index (alias for codification method)
-    //  */
-    // public function codificationIndex()
-    // {
-    //     // Check permission for Module 2
-    //     if (!Auth::user()->hasPermission(2)) {
-    //         abort(403, 'Unauthorized access to Codification');
-    //     }
-
-    //     return $this->codification();
-    // }
-
 
     public function codification()
 {
@@ -354,57 +323,73 @@ public function codificationIndex()
         return view('samples.codification-show', compact('sample'));
     }
 
-    /**
-     * Process codification (Kodifikasi Barang Uji)
-     */
-    public function processCodification(Request $request, $id)
-    {
-        // Check permission for Module 2
-        if (!Auth::user()->hasPermission(2)) {
-            abort(403, 'Unauthorized access to Codification');
+ /**
+ * Process codification (Kodifikasi Barang Uji)
+ */
+public function processCodification(Request $request, $id)
+{
+    // Check permission for Module 2
+    if (!Auth::user()->hasPermission(2)) {
+        abort(403, 'Unauthorized access to Codification');
+    }
+
+    $sample = Sample::findOrFail($id);
+
+    // Validate only the fields we actually send from the form
+    $validated = $request->validate([
+        'codification_notes' => 'nullable|string|max:1000',
+        'action' => 'required|in:approve,reject',
+        // add other fields here if your form sends them
+    ]);
+
+    // prepare variables so they are available after transaction
+    $message = null;
+    $logAction = null;
+
+    DB::transaction(function () use ($sample, $validated, &$message, &$logAction) {
+        // Determine action
+        $action = $validated['action'];
+
+        if ($action === 'approve') {
+            $sample->update([
+                'status' => 'codified',
+                'codification_notes' => $validated['codification_notes'] ?? null,
+                // only include this if your samples table has this column
+                'meets_requirements' => 1,
+                'codified_by' => Auth::id(),
+                'codified_at' => now()
+            ]);
+
+            $message = 'Kodifikasi barang uji berhasil disetujui';
+            $logAction = 'codification_approved';
+        } else {
+            // action === 'reject'
+            $sample->update([
+                'status' => 'registered', // or 'rejected_codification' if you prefer
+                'codification_notes' => $validated['codification_notes'] ?? null,
+                // only include this if your samples table has this column
+                'meets_requirements' => 0,
+                'rejected_codification_at' => now()
+            ]);
+
+            $message = 'Kodifikasi barang uji ditolak, sampel dikembalikan';
+            $logAction = 'codification_rejected';
         }
 
-        $sample = Sample::findOrFail($id);
-        
-        $validated = $request->validate([
-            'codification_notes' => 'nullable|string|max:1000',
-            'special_requirements' => 'nullable|string|max:1000',
-            'action' => 'required|in:approve,reject'
+        // Log audit trail
+        $this->logAudit($logAction, $sample->id, [
+            'processed_by' => Auth::user()->name,
+            'action' => $action,
+            'notes' => $validated['codification_notes'] ?? null
         ]);
+    });
 
-        DB::transaction(function () use ($sample, $validated) {
-            if ($validated['action'] === 'approve') {
-                $sample->update([
-                    'status' => 'codified',
-                    'codification_notes' => $validated['codification_notes'],
-                    'special_requirements' => $validated['special_requirements'],
-                    'codified_by' => Auth::id(),
-                    'codified_at' => now()
-                ]);
-                
-                $message = 'Kodifikasi barang uji berhasil disetujui';
-                $logAction = 'codification_approved';
-            } else {
-                $sample->update([
-                    'status' => 'registered', // Back to registered
-                    'codification_notes' => $validated['codification_notes'],
-                    'rejected_codification_at' => now()
-                ]);
-                
-                $message = 'Kodifikasi barang uji ditolak, sampel dikembalikan';
-                $logAction = 'codification_rejected';
-            }
-            
-            // Log audit trail
-            $this->logAudit($logAction, $sample->id, [
-                'processed_by' => Auth::user()->name,
-                'notes' => $validated['codification_notes']
-            ]);
-        });
+    // Redirect to codification index (pastikan route name benar)
+    return redirect()->route('samples.codification.index')
+        ->with('success', $message ?? 'Operasi selesai');
+}
 
-        return redirect()->route('samples.codification')
-            ->with('success', $message);
-    }
+
 
     /**
      * Print sample form (F.2.7.1.0.01 format)

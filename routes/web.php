@@ -73,36 +73,86 @@ Route::middleware(['auth'])->group(function () {
         });
 
     // Sample Management routes - static routes placed BEFORE parameter routes
-    Route::prefix('samples')
-        ->name('samples.')
-        ->group(function () {
-            // Index
-            Route::get('/',     [SampleController::class, 'index'])->name('index');
+//     Route::prefix('samples')
+//         ->name('samples.')
+//         ->group(function () {
+//             // Index
+//             Route::get('/',[SampleController::class, 'index'])->name('index');
 
-            // Static / special routes (must be BEFORE {id} routes)
-            Route::get('/codification', [SampleController::class, 'codificationIndex'])->name('codification.index');
+//             // Static / special routes (must be BEFORE {id} routes)
+//             Route::get('/codification', [SampleController::class, 'codificationIndex'])->name('codification.index');
 
-    // Codification subgroup (clear naming and numeric constraints)
-    Route::prefix('codification')
-        ->name('codification.')
-        ->group(function () {
-            Route::get('/', [SampleController::class, 'codificationIndex'])->name('index');
-            Route::get('/{id}', [SampleController::class, 'showCodification'])->whereNumber('id')->name('show');
-            Route::get('/report', [SampleController::class, 'showReport'])->whereNumber('id')->name('report');
-            Route::post('/{id}', [SampleController::class, 'processCodification'])->whereNumber('id')->name('process');
-        });
+//     // Codification subgroup (clear naming and numeric constraints)
+//     Route::prefix('codification')
+//         ->name('codification.')
+//         ->group(function () {
+//             Route::get('/', [SampleController::class, 'codificationIndex'])->name('index');
+//             Route::get('/{id}', [SampleController::class, 'showCodification'])->whereNumber('id')->name('show');
+//             Route::get('/report', [SampleController::class, 'showReport'])->whereNumber('id')->name('report');
+//             Route::post('/codify', [SampleController::class, 'processCodification'])->whereNumber('id')->name('process');
+//         });
 
-    // Routes that use {id} (constrained to numbers)
-    Route::get('/{id}', [SampleController::class, 'show'])->whereNumber('id')->name('show');
-    Route::get('/{id}/preview', [SampleController::class, 'preview'])->whereNumber('id')->name('preview');
-    Route::get('/{id}/edit', [SampleController::class, 'edit'])->whereNumber('id')->name('edit');
-    Route::put('/{id}', [SampleController::class, 'update'])->whereNumber('id')->name('update');
-    Route::post('/{id}/approve', [SampleController::class, 'approve'])->whereNumber('id')->name('approve');
-    Route::post('/{id}/reject', [SampleController::class, 'reject'])->whereNumber('id')->name('reject');
-    Route::post('/{id}/archive', [SampleController::class, 'archive'])->whereNumber('id')->name('archive');
-    Route::post('/{id}/codify', [SampleController::class, 'codify'])->whereNumber('id')->name('codify');
-    Route::get('/{id}/print-form', [SampleController::class, 'printForm'])->whereNumber('id')->name('print-form');
-});
+//     // Routes that use {id} (constrained to numbers)
+//     Route::get('/{id}', [SampleController::class, 'show'])->whereNumber('id')->name('show');
+//     Route::get('/{id}/preview', [SampleController::class, 'preview'])->whereNumber('id')->name('preview');
+//     Route::get('/{id}/edit', [SampleController::class, 'edit'])->whereNumber('id')->name('edit');
+//     Route::put('/{id}', [SampleController::class, 'update'])->whereNumber('id')->name('update');
+//     Route::post('/{id}/approve', [SampleController::class, 'approve'])->whereNumber('id')->name('approve');
+//     Route::post('/{id}/reject', [SampleController::class, 'reject'])->whereNumber('id')->name('reject');
+//     Route::post('/{id}/archive', [SampleController::class, 'archive'])->whereNumber('id')->name('archive');
+//     Route::post('/{id}/codify', [SampleController::class, 'codify'])->whereNumber('id')->name('codify');
+//     Route::get('/{id}/print-form', [SampleController::class, 'printForm'])->whereNumber('id')->name('print-form');
+// });
+
+// Sample Management routes - static routes BEFORE parameter routes
+Route::prefix('samples')
+    ->name('samples.')
+    ->group(function () {
+        // Index
+        Route::get('/', [SampleController::class, 'index'])->name('index');
+
+        // Codification overview
+        Route::get('/codification', [SampleController::class, 'codificationIndex'])->name('codification.index');
+
+        // Codification subgroup (use {id} where needed)
+        Route::prefix('codification')
+            ->name('codification.')
+            ->group(function () {
+                // /samples/codification/                 -> index
+                Route::get('/', [SampleController::class, 'codificationIndex'])->name('index');
+
+                // /samples/codification/{id}              -> show specific codification
+                Route::get('/{id}', [SampleController::class, 'showCodification'])
+                    ->whereNumber('id')
+                    ->name('show');
+
+                // /samples/codification/{id}/report       -> report for a specific codification
+                Route::get('/{id}/report', [SampleController::class, 'showReport'])
+                    ->whereNumber('id')
+                    ->name('report');
+
+                // /samples/codification/{id}/process      -> process codification (POST)
+                Route::post('/{id}/process', [SampleController::class, 'processCodification'])
+                    ->whereNumber('id')
+                    ->name('process');
+            });
+
+        // Routes that use {id} (constrained to numbers) - these are sample-level routes
+        Route::get('/{id}', [SampleController::class, 'show'])->whereNumber('id')->name('show');
+        Route::get('/{id}/preview', [SampleController::class, 'preview'])->whereNumber('id')->name('preview');
+        Route::get('/{id}/edit', [SampleController::class, 'edit'])->whereNumber('id')->name('edit');
+        Route::put('/{id}', [SampleController::class, 'update'])->whereNumber('id')->name('update');
+        Route::post('/{id}/approve', [SampleController::class, 'approve'])->whereNumber('id')->name('approve');
+        Route::post('/{id}/reject', [SampleController::class, 'reject'])->whereNumber('id')->name('reject');
+        Route::post('/{id}/archive', [SampleController::class, 'archive'])->whereNumber('id')->name('archive');
+
+        // if you want a "codify" action directly under sample, make sure the controller method exists
+        // either change this to call the existing method name, or implement SampleController::codify()
+        Route::post('/{id}/codify', [SampleController::class, 'processCodification'])->whereNumber('id')->name('codify');
+
+        Route::get('/{id}/print-form', [SampleController::class, 'printForm'])->whereNumber('id')->name('print-form');
+    });
+
 
     // Parameter Management routes - Permission check in controller
     Route::prefix('parameters')
