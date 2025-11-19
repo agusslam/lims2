@@ -12,6 +12,7 @@ use App\Models\Parameter;
 use App\Models\User;
 use App\Helpers\CodeGenerator;
 use Carbon\Carbon;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 class SampleController extends Controller
 {
@@ -248,13 +249,45 @@ class SampleController extends Controller
     /**
      * Display registered samples for codification
      */
-    public function codification()
-    {
-        // Check permission for Module 2
-        if (!Auth::user()->hasPermission(2)) {
-            abort(403, 'Unauthorized access to Codification');
-        }
+    // public function codification()
+    // {
+    //     // Check permission for Module 2
+    //     if (!Auth::user()->hasPermission(2)) {
+    //         abort(403, 'Unauthorized access to Codification');
+    //     }
 
+    //     $samples = Sample::with(['sampleType', 'parameters', 'registeredBy'])
+    //         ->where('status', 'registered')
+    //         ->orderBy('registered_at', 'desc')
+    //         ->paginate(20);
+
+    //     return view('codifications.index', compact('samples'));
+    // }
+
+    // /**
+    //  * Display codification index (alias for codification method)
+    //  */
+    // public function codificationIndex()
+    // {
+    //     // Check permission for Module 2
+    //     if (!Auth::user()->hasPermission(2)) {
+    //         abort(403, 'Unauthorized access to Codification');
+    //     }
+
+    //     return $this->codification();
+    // }
+
+
+    public function codification()
+{
+    // Check permission for Module 2
+    if (!Auth::user()->hasPermission(2)) {
+        abort(403, 'Unauthorized access to Codification');
+    }
+
+    // 1) Prefer samples table (registered)
+    $registeredCount = Sample::where('status', 'registered')->count();
+    if ($registeredCount > 0) {
         $samples = Sample::with(['sampleType', 'parameters', 'registeredBy'])
             ->where('status', 'registered')
             ->orderBy('registered_at', 'desc')
@@ -263,18 +296,48 @@ class SampleController extends Controller
         return view('codifications.index', compact('samples'));
     }
 
-    /**
-     * Display codification index (alias for codification method)
-     */
-    public function codificationIndex()
-    {
-        // Check permission for Module 2
-        if (!Auth::user()->hasPermission(2)) {
-            abort(403, 'Unauthorized access to Codification');
-        }
+    // 2) FALLBACK: jika tidak ada Sample, ambil SampleRequest yang sudah di-approve
+    $qr = SampleRequest::with(['sampleType', 'parameters', 'customer'])
+        ->where('status', 'approved')
+        ->orderBy('submitted_at', 'desc')
+        ->paginate(20);
 
-        return $this->codification();
-    }
+    // Map each SampleRequest into a pseudo-Sample object compatible with view
+    $mapped = $qr->getCollection()->map(function ($req) {
+        $tests = $req->parameters->map(function ($param) {
+            return (object)[ 'testParameter' => $param ];
+        });
+
+        return (object)[
+            'id' => $req->id,
+            'sample_code' => null,
+            'status' => 'approved',
+            'sampleRequest' => $req,
+            'sampleType' => $req->sampleType,
+            'custom_sample_type' => null,
+            'quantity' => $req->quantity,
+            'description' => $req->customer_requirements ?? null,
+            'tests' => $tests,
+        ];
+    });
+
+    // Build paginator from mapped collection
+    $samples = new LengthAwarePaginator(
+        $mapped,
+        $qr->total(),
+        $qr->perPage(),
+        $qr->currentPage(),
+        ['path' => LengthAwarePaginator::resolveCurrentPath()]
+    );
+
+    return view('codifications.index', compact('samples'));
+}
+
+/** alias */
+public function codificationIndex()
+{
+    return $this->codification();
+}
 
     /**
      * Show sample for codification

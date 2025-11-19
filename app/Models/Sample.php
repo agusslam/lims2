@@ -12,6 +12,7 @@ class Sample extends Model
 
     protected $fillable = [
         'tracking_code',
+        'sample_request_id',
         'sample_code',
         'customer_name',
         'company_name',
@@ -66,18 +67,55 @@ class Sample extends Model
         return $this->belongsTo(User::class, 'assigned_analyst_id');
     }
 
+
+    public function getTestsAttribute()
+{
+    // Jika Sample asli -> gunakan relasi parameters sebagai sumber test
+    if ($this->relationLoaded('parameters')) {
+        return $this->parameters->map(function ($param) {
+            return (object)[
+                'testParameter' => $param,
+            ];
+        });
+    }
+
+    // Jika relasi belum diload, load dulu
+    if (method_exists($this, 'parameters')) {
+        $this->load('parameters');
+        return $this->parameters->map(function ($param) {
+            return (object)[
+                'testParameter' => $param,
+            ];
+        });
+    }
+
+    // Jika ini pseudo-object (fallback) dari SampleRequest
+    // dan sudah memiliki properti tests, kembalikan apa adanya
+    if (property_exists($this, 'tests') && is_array($this->tests)) {
+        return collect($this->tests);
+    }
+
+    if (property_exists($this, 'tests') && $this->tests instanceof \Illuminate\Support\Collection) {
+        return $this->tests;
+    }
+
+    // Default fallback: kembalikan collection kosong
+    return collect([]);
+}
     /**
      * Get the parameters for this sample (using existing sample_tests relationship)
      */
     public function parameters()
     {
         return $this->belongsToMany(
-            TestParameter::class, 
+            Parameter::class, 
             'sample_tests', 
             'sample_id', 
-            'test_parameter_id'
+            'parameters_id'
         )->withPivot('result', 'notes', 'method_used', 'tested_by', 'tested_at');
     }
+
+    
 
     /**
      * Get test results for this sample (using existing sample_tests table)

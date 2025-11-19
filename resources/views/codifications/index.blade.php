@@ -94,10 +94,10 @@
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     <p class="mb-1">
-                                        <strong>Pelanggan:</strong> {{ $sample->sampleRequest->customer->contact_person }}
-                                        @if($sample->sampleRequest->customer->company_name)
-                                            <br><small class="text-muted">{{ $sample->sampleRequest->customer->company_name }}</small>
-                                        @endif
+                                        <strong>Pelanggan:</strong>
+{{ optional(optional($sample->sampleRequest)->customer)->contact_person
+   ?? $sample->customer_name
+   ?? '— Tidak ada data pelanggan —' }}
                                     </p>
                                     <p class="mb-1">
                                         <strong>Tracking:</strong> {{ $sample->sampleRequest->tracking_code }}
@@ -111,7 +111,7 @@
                                         <strong>Quantity:</strong> {{ $sample->quantity }} sampel
                                     </p>
                                     <p class="mb-1">
-                                        <strong>Parameter:</strong> {{ $sample->tests->count() }} parameter
+                                        <strong>Parameter:</strong> {{ optional($sample->tests)->count() ?? 0 }} parameter
                                     </p>
                                 </div>
                             </div>
@@ -124,7 +124,7 @@
                             @endif
 
                             <!-- Test Parameters -->
-                            <div class="mb-3">
+                            <!-- <div class="mb-3">
                                 <h6>Parameter Uji:</h6>
                                 <div class="row">
                                     @foreach($sample->tests->groupBy('testParameter.category') as $category => $tests)
@@ -138,7 +138,7 @@
                                     </div>
                                     @endforeach
                                 </div>
-                            </div>
+                            </div> -->
                         </div>
                         
                         <div class="col-md-4">
@@ -175,7 +175,7 @@
                                         <i class="fas fa-qrcode me-2"></i>
                                         Proses Kodifikasi
                                     </button>
-                                    <a href="{{ route('samples.codification-report', $sample->id) }}" 
+                                    <a href="{{ route('samples.codification.report', $sample->id) }}" 
                                        class="btn btn-outline-secondary" target="_blank">
                                         <i class="fas fa-print me-2"></i>
                                         Cetak Laporan

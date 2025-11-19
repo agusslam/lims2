@@ -48,7 +48,12 @@ class Parameter extends Model
      */
     public function samples()
     {
-        return $this->belongsToMany(Sample::class, 'parameter_sample');
+        return $this->belongsToMany(
+        \App\Models\Sample::class,
+        'sample_tests',
+        'parameters_id', // kolom pivot yang menunjuk ke parameters.id
+        'sample_id'      // kolom pivot yang menunjuk ke samples.id
+    )->withPivot('result', 'notes', 'method_used', 'tested_by', 'tested_at');
     }
 
     /**

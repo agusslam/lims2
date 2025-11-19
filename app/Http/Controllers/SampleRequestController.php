@@ -11,6 +11,7 @@ use App\Models\SampleRequest;
 use App\Models\SampleType;
 use App\Models\Parameter;
 use App\Helpers\CodeGenerator;
+use App\Models\Sample;
 
 class SampleRequestController extends Controller
 {
@@ -268,59 +269,402 @@ class SampleRequestController extends Controller
     /**
      * Update the status of the specified sample request
      */
+    // public function updateStatus(Request $request, $id)
+    // {
+    //     // Check permission for Module 1
+    //     if (!Auth::user()->hasPermission(1)) {
+    //         abort(403, 'Unauthorized access to Sample Requests');
+    //     }
+
+    //     $sampleRequest = SampleRequest::findOrFail($id);
+        
+    //     $validated = $request->validate([
+    //         'status' => 'required|in:pending,registered,assigned,testing,review,completed',
+    //         'notes' => 'nullable|string|max:1000'
+    //     ]);
+
+    //     DB::transaction(function () use ($sampleRequest, $validated) {
+    //         $sampleRequest->update(['status' => $validated['status']]);
+            
+    //         $this->logAudit('status_updated', $sampleRequest->id, [
+    //             'updated_by' => Auth::user()->name,
+    //             'new_status' => $validated['status'],
+    //             'notes' => $validated['notes'] ?? null
+    //         ]);
+    //     });
+
+    //     return redirect()->back()->with('success', 'Status berhasil diperbarui');
+    // }
+
     public function updateStatus(Request $request, $id)
-    {
-        // Check permission for Module 1
-        if (!Auth::user()->hasPermission(1)) {
-            abort(403, 'Unauthorized access to Sample Requests');
+{
+    \Log::info('DEBUG: updateStatus() dipanggil untuk ID '.$id.' oleh user_id='.Auth::id());
+
+    $request->validate([
+        'status' => 'required|string'
+    ]);
+
+    $status = $request->input('status');
+
+    // ambil sample request berserta relasi parameters
+    $sampleRequest = SampleRequest::with('parameters')->findOrFail($id);
+
+    DB::beginTransaction();
+    try {
+        // update status di sample_request dulu
+        $oldStatus = $sampleRequest->status;
+        $sampleRequest->status = $status;
+        $sampleRequest->save();
+
+        \Log::info("DEBUG: sample_request id={$sampleRequest->id} status updated from {$oldStatus} to {$status}");
+
+        // Jika status berubah ke 'registered' (atau 'approved'), bikin record di table samples
+        // Ganti 'registered' dengan status yang sesuai di aplikasi kamu jika perlu
+        if (in_array($status, ['registered', 'approved'])) {
+            // idempotency: cek apakah sample sudah ada untuk request ini
+            if (Sample::where('tracking_code', $sampleRequest->tracking_code)->exists() ||
+                Sample::where('sample_request_id', $sampleRequest->id)->exists()) {
+                \Log::warning("updateStatus: sample already exists for request id=".$sampleRequest->id);
+                // tetap commit update status (karena sample_request sudah di-update), tapi informasikan user
+                DB::commit();
+                return redirect()->back()->with('warning', 'Status diperbarui, tetapi sample sudah ada sebelumnya.');
+            }
+
+            // generate sample_code (tetap aman jika helper error)
+            $sampleCode = 'SMP-'.strtoupper(uniqid());
+            if (class_exists(\App\Helpers\CodeGenerator::class)) {
+                try {
+                    $sampleCode = \App\Helpers\CodeGenerator::generateInternalCode();
+                } catch (\Throwable $e) {
+                    \Log::warning('CodeGenerator failed in updateStatus: '.$e->getMessage());
+                }
+            }
+
+            // buat sample baru (pastikan sample_request_id ada di $fillable)
+            $sample = new \App\Models\Sample([
+                'tracking_code' => $sampleRequest->tracking_code,
+                'sample_request_id' => $sampleRequest->id,
+                'sample_code' => $sampleCode,
+                'customer_name' => $sampleRequest->contact_person,
+                'company_name' => $sampleRequest->company_name,
+                'phone' => $sampleRequest->phone,
+                'email' => $sampleRequest->email,
+                'address' => $sampleRequest->address,
+                'city' => $sampleRequest->city,
+                'sample_type_id' => $sampleRequest->sample_type_id,
+                'quantity' => $sampleRequest->quantity,
+                'customer_requirements' => $sampleRequest->customer_requirements,
+                'status' => 'registered', // status default di table samples (sesuaikan)
+                'registered_by' => Auth::id(),
+                'registered_at' => now()
+            ]);
+
+            $sample->saveOrFail();
+            \Log::info('updateStatus: sample created id='.$sample->id.' for request='.$sampleRequest->id);
+
+            // sync parameters ke pivot jika ada
+            if ($sampleRequest->parameters && $sampleRequest->parameters->count() > 0) {
+                $paramIds = $sampleRequest->parameters->pluck('id')->toArray();
+                $sample->parameters()->sync($paramIds);
+                \Log::info('updateStatus: synced parameters for sample id='.$sample->id);
+            }
+
+            // optional: buat audit log
+            if (method_exists($this, 'logAudit')) {
+                $this->logAudit('sample_request_status_registered_and_created_sample', $sample->id, [
+                    'updated_by' => Auth::user()->name ?? null,
+                    'sample_code' => $sampleCode,
+                    'tracking_code' => $sampleRequest->tracking_code
+                ]);
+            }
         }
 
-        $sampleRequest = SampleRequest::findOrFail($id);
-        
-        $validated = $request->validate([
-            'status' => 'required|in:pending,registered,assigned,testing,review,completed',
-            'notes' => 'nullable|string|max:1000'
-        ]);
+        DB::commit();
 
-        DB::transaction(function () use ($sampleRequest, $validated) {
-            $sampleRequest->update(['status' => $validated['status']]);
-            
-            $this->logAudit('status_updated', $sampleRequest->id, [
-                'updated_by' => Auth::user()->name,
-                'new_status' => $validated['status'],
-                'notes' => $validated['notes'] ?? null
-            ]);
-        });
-
-        return redirect()->back()->with('success', 'Status berhasil diperbarui');
+        return redirect()->back()->with('success', 'Status berhasil diperbarui'.(isset($sample) ? ' dan sample dibuat (kode: '.$sample->sample_code.')' : '.'));
+    } catch (\Throwable $e) {
+        DB::rollBack();
+        \Log::error('Error updateStatus SampleRequest: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        return redirect()->back()->withErrors('Terjadi kesalahan saat memperbarui status: '.$e->getMessage());
     }
-
-    public function approve(Request $request, $id)
-{
-    // permission check (sama seperti lainnya)
-    if (!Auth::user()->hasPermission(1)) {
-        abort(403, 'Unauthorized access to Sample Requests');
-    }
-
-    $sampleRequest = SampleRequest::findOrFail($id);
-
-    DB::transaction(function () use ($sampleRequest) {
-        // contoh: ubah status menjadi 'registered' saat approve
-        $sampleRequest->update([
-            'status' => 'registered',
-            'approved_by' => Auth::id(),
-            'approved_at' => now()
-        ]);
-
-        // audit log
-        $this->logAudit('sample_request_approved', $sampleRequest->id, [
-            'approved_by' => Auth::user()->name ?? null,
-            'approved_at' => now()->toDateTimeString()
-        ]);
-    });
-
-    return redirect()->back()->with('success', 'Permohonan sampel berhasil disetujui.');
 }
+
+
+//     public function approve(Request $request, $id)
+// {
+//     // permission check (sama seperti lainnya)
+//     if (!Auth::user()->hasPermission(1)) {
+//         abort(403, 'Unauthorized access to Sample Requests');
+//     }
+
+//     $sampleRequest = SampleRequest::findOrFail($id);
+
+//     DB::transaction(function () use ($sampleRequest) {
+//         // contoh: ubah status menjadi 'registered' saat approve
+//         $sampleRequest->update([
+//             'status' => 'registered',
+//             'approved_by' => Auth::id(),
+//             'approved_at' => now()
+//         ]);
+
+//         // audit log
+//         $this->logAudit('sample_request_approved', $sampleRequest->id, [
+//             'approved_by' => Auth::user()->name ?? null,
+//             'approved_at' => now()->toDateTimeString()
+//         ]);
+//     });
+
+//     return redirect()->back()->with('success', 'Permohonan sampel berhasil disetujui.');
+// }
+
+// public function approve(Request $request, $id)
+// {
+//     // izin akses (sama seperti lainnya)
+//     if (!Auth::user()->hasAnyRole(['SUPERVISOR', 'ADMIN', 'DEVEL'])) {
+//         abort(403, 'Unauthorized');
+//     }
+
+//     $sampleRequest = SampleRequest::with('parameters')->findOrFail($id);
+
+//     DB::beginTransaction();
+//     try {
+//         // Prevent double-approve / duplicate sample record (cek tracking_code)
+//         if (Sample::where('tracking_code', $sampleRequest->tracking_code)->exists()) {
+//             DB::rollBack();
+//             return redirect()->back()->with('warning', 'Permintaan ini sudah pernah di-approve (sample sudah ada).');
+//         }
+
+//         // generate sample internal code (sesuaikan dengan helper kamu)
+//         $sampleCode = null;
+//         if (class_exists(\App\Helpers\CodeGenerator::class)) {
+//             try {
+//                 $sampleCode = CodeGenerator::generateInternalCode();
+//             } catch (\Throwable $e) {
+//                 // fallback bila generator error
+//                 $sampleCode = 'SMP-' . strtoupper(uniqid());
+//             }
+//         } else {
+//             $sampleCode = 'SMP-' . strtoupper(uniqid());
+//         }
+
+//         // create sample
+//         $sample = Sample::create([
+//             'tracking_code' => $sampleRequest->tracking_code,
+//             'sample_code' => $sampleCode,
+//             'customer_name' => $sampleRequest->contact_person,
+//             'company_name' => $sampleRequest->company_name,
+//             'phone' => $sampleRequest->phone,
+//             'email' => $sampleRequest->email,
+//             'address' => $sampleRequest->address,
+//             'city' => $sampleRequest->city,
+//             'sample_type_id' => $sampleRequest->sample_type_id,
+//             'quantity' => $sampleRequest->quantity,
+//             'customer_requirements' => $sampleRequest->customer_requirements,
+//             'status' => 'registered',           // status awal di tabel samples
+//             'registered_by' => Auth::id(),
+//             'registered_at' => now()
+//         ]);
+
+//         // sync parameters (jika ada relationship many-to-many)
+//         if ($sampleRequest->parameters && $sampleRequest->parameters->count() > 0) {
+//             $paramIds = $sampleRequest->parameters->pluck('id')->toArray();
+//             $sample->parameters()->sync($paramIds);
+//         }
+
+//         // update sample_request status (menandakan sudah di-approve)
+//         $sampleRequest->update([
+//             'status' => 'approved'
+//         ]);
+
+//         // audit log (pakai metode yang ada di controller)
+//         $this->logAudit('sample_request_approved_and_created_sample', $sample->id, [
+//             'approved_by' => Auth::user()->name ?? null,
+//             'sample_code' => $sampleCode,
+//             'tracking_code' => $sampleRequest->tracking_code
+//         ]);
+
+//         DB::commit();
+
+//         return redirect()->route('sample-requests.show', $sampleRequest->id)
+//             ->with('success', 'Permohonan disetujui dan data sampel berhasil dibuat (kode: ' . $sampleCode . ').');
+//     } catch (\Throwable $e) {
+//         DB::rollBack();
+//         \Log::error('Error approving SampleRequest and creating Sample: '.$e->getMessage(), ['trace'=>$e->getTraceAsString()]);
+//         return redirect()->back()->withErrors('Terjadi kesalahan saat memproses approve: '.$e->getMessage());
+//     }
+// }
+// public function approve(Request $request, $id)
+// {
+//     \Log::info('DEBUG: approve() dipanggil untuk ID '.$id);
+    
+//     DB::listen(function ($query) {
+//         \Log::info('SQL: '.$query->sql.' | bindings: '.json_encode($query->bindings));
+//     });
+
+//     if (!Auth::user()->hasAnyRole(['SUPERVISOR', 'ADMIN', 'DEVEL'])) {
+//         abort(403, 'Unauthorized');
+//     }
+
+//     $sampleRequest = SampleRequest::with('parameters')->findOrFail($id);
+
+//     DB::beginTransaction();
+//     try {
+//         // prevent duplicates (cek tracking_code atau sample_request_id)
+//         if (Sample::where('tracking_code', $sampleRequest->tracking_code)->exists() ||
+//             Sample::where('sample_request_id', $sampleRequest->id)->exists()) {
+//             DB::rollBack();
+//             \Log::warning('Approve skipped: sample already exists for request id='.$sampleRequest->id);
+//             return redirect()->back()->with('warning', 'Permintaan ini sudah pernah di-approve (sample sudah ada).');
+//         }
+
+//         // generate code
+//         $sampleCode = class_exists(\App\Helpers\CodeGenerator::class)
+//             ? (function() {
+//                 try { return CodeGenerator::generateInternalCode(); } catch (\Throwable $e) {}
+//                 return 'SMP-'.strtoupper(uniqid());
+//             })()
+//             : 'SMP-'.strtoupper(uniqid());
+
+//         // create sample (pastikan $fillable di Sample mencakup semua kolom di bawah)
+//         $sample = Sample::create([
+//             'tracking_code' => $sampleRequest->tracking_code,
+//             'sample_request_id' => $sampleRequest->id,
+//             'sample_code' => $sampleCode,
+//             'customer_name' => $sampleRequest->contact_person,
+//             'company_name' => $sampleRequest->company_name,
+//             'phone' => $sampleRequest->phone,
+//             'email' => $sampleRequest->email,
+//             'address' => $sampleRequest->address,
+//             'city' => $sampleRequest->city,
+//             'sample_type_id' => $sampleRequest->sample_type_id,
+//             'quantity' => $sampleRequest->quantity,
+//             'customer_requirements' => $sampleRequest->customer_requirements,
+//             'status' => 'registered',
+//             'registered_by' => Auth::id(),
+//             'registered_at' => now()
+//         ]);
+
+//         $sample->saveOrFail();
+//         console.log('Approve: sample created id='.$sample->id.' attributes='.json_encode($sample->getAttributes()));
+//         \Log::info('Approve: sample created id='.$sample->id.' attributes='.json_encode($sample->getAttributes()));
+
+//         // sync parameters (cek apakah relasi ada)
+//         if ($sampleRequest->parameters && $sampleRequest->parameters->count() > 0) {
+//             $paramIds = $sampleRequest->parameters->pluck('id')->toArray();
+//             $sample->parameters()->sync($paramIds);
+//             \Log::info('Approve: synced parameters for sample id='.$sample->id, $paramIds);
+//         }
+
+//         // update request status
+//         $sampleRequest->update(['status' => 'approved']);
+//         \Log::info('Approve: before commit, sample_request updated status=approved for id='.$sampleRequest->id);
+
+//         $this->logAudit('sample_request_approved_and_created_sample', $sample->id, [
+//             'approved_by' => Auth::user()->name ?? null,
+//             'sample_code' => $sampleCode,
+//             'tracking_code' => $sampleRequest->tracking_code
+//         ]);
+
+//         DB::commit();
+
+//         return redirect()->route('samples.codification.index')
+//             ->with('success', 'Permohonan disetujui dan sample dibuat (kode: '.$sampleCode.').');
+//     } catch (\Throwable $e) {
+//         DB::rollBack();
+//         \Log::error('Error approving SampleRequest: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
+//         return redirect()->back()->withErrors('Terjadi kesalahan saat memproses approve: '.$e->getMessage());
+//     }
+// }
+
+// public function approve(Request $request, $id)
+// {
+//     \Log::info('DEBUG: approve() dipanggil untuk ID '.$id);
+
+//     // DEBUG: tampilkan query SQL (sementara)
+//     DB::listen(function ($query) {
+//         \Log::info('SQL: '.$query->sql.' | bindings: '.json_encode($query->bindings));
+//     });
+
+//     if (!Auth::user()->hasAnyRole(['SUPERVISOR', 'ADMIN', 'DEVEL'])) {
+//         abort(403, 'Unauthorized');
+//     }
+
+//     $sampleRequest = SampleRequest::with('parameters')->findOrFail($id);
+
+//     DB::beginTransaction();
+//     try {
+//         // prevent duplicates (cek tracking_code atau sample_request_id)
+//         \Log::info('DEBUG approve: checking duplicates for request id='.$sampleRequest->id.' tracking_code='.$sampleRequest->tracking_code);
+//         if (Sample::where('tracking_code', $sampleRequest->tracking_code)->exists() ||
+//             Sample::where('sample_request_id', $sampleRequest->id)->exists()) {
+//             DB::rollBack();
+//             \Log::warning('Approve skipped: sample already exists for request id='.$sampleRequest->id);
+//             return redirect()->back()->with('warning', 'Permintaan ini sudah pernah di-approve (sample sudah ada).');
+//         }
+
+//         // generate code (safe)
+//         $sampleCode = 'SMP-'.strtoupper(uniqid());
+//         if (class_exists(\App\Helpers\CodeGenerator::class)) {
+//             try {
+//                 $sampleCode = \App\Helpers\CodeGenerator::generateInternalCode();
+//             } catch (\Throwable $e) {
+//                 \Log::warning('CodeGenerator failed, fallback to uniqid: '.$e->getMessage());
+//             }
+//         }
+
+//         // create sample using saveOrFail untuk memaksa exception bila gagal
+//         $sample = new Sample([
+//             'tracking_code' => $sampleRequest->tracking_code,
+//             'sample_request_id' => $sampleRequest->id,
+//             'sample_code' => $sampleCode,
+//             'customer_name' => $sampleRequest->contact_person,
+//             'company_name' => $sampleRequest->company_name,
+//             'phone' => $sampleRequest->phone,
+//             'email' => $sampleRequest->email,
+//             'address' => $sampleRequest->address,
+//             'city' => $sampleRequest->city,
+//             'sample_type_id' => $sampleRequest->sample_type_id,
+//             'quantity' => $sampleRequest->quantity,
+//             'customer_requirements' => $sampleRequest->customer_requirements,
+//             'status' => 'registered',
+//             'registered_by' => Auth::id(),
+//             'registered_at' => now()
+//         ]);
+
+//         // simpan (akan throw jika ada masalah)
+//         $sample->saveOrFail();
+
+//         \Log::info('Approve: sample created id='.$sample->id.' attributes='.json_encode($sample->getAttributes()));
+
+//         // sync parameters (cek apakah relasi ada)
+//         if ($sampleRequest->parameters && $sampleRequest->parameters->count() > 0) {
+//             $paramIds = $sampleRequest->parameters->pluck('id')->toArray();
+//             $sample->parameters()->sync($paramIds);
+//             \Log::info('Approve: synced parameters for sample id='.$sample->id, $paramIds);
+//         }
+
+//         // update request status
+//         $sampleRequest->update(['status' => 'approved']);
+//         \Log::info('Approve: sample_request updated status=approved for id='.$sampleRequest->id);
+
+//         // audit log
+//         $this->logAudit('sample_request_approved_and_created_sample', $sample->id, [
+//             'approved_by' => Auth::user()->name ?? null,
+//             'sample_code' => $sampleCode,
+//             'tracking_code' => $sampleRequest->tracking_code
+//         ]);
+
+//         DB::commit();
+
+//         return redirect()->route('samples.codification.index')
+//             ->with('success', 'Permohonan disetujui dan sample dibuat (kode: '.$sampleCode.').');
+//     } catch (\Throwable $e) {
+//         DB::rollBack();
+//         \Log::error('Error approving SampleRequest: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
+//         return redirect()->back()->withErrors('Terjadi kesalahan saat memproses approve: '.$e->getMessage());
+//     }
+// }
+
 
 public function archive(Request $request, $id)
 {

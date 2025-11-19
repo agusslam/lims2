@@ -18,6 +18,7 @@ use App\Http\Controllers\ArchiveController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
+use App\Http\Controllers\AssignmentController;
 
 // OPTIONAL: enforce that {id} parameters are numeric to avoid "codification" being matched by {id}
 Route::pattern('id', '[0-9]+');
@@ -76,30 +77,32 @@ Route::middleware(['auth'])->group(function () {
         ->name('samples.')
         ->group(function () {
             // Index
-            Route::get('/', [SampleController::class, 'index'])->name('index');
+            Route::get('/',     [SampleController::class, 'index'])->name('index');
 
             // Static / special routes (must be BEFORE {id} routes)
             Route::get('/codification', [SampleController::class, 'codificationIndex'])->name('codification.index');
 
-            // Codification subgroup (clear naming and numeric constraints)
-            Route::prefix('codification')
-                ->name('codification.')
-                ->group(function () {
-                    Route::get('/', [SampleController::class, 'codificationIndex'])->name('index');
-                    Route::get('/{id}', [SampleController::class, 'showCodification'])->whereNumber('id')->name('show');
-                    Route::post('/{id}', [SampleController::class, 'processCodification'])->whereNumber('id')->name('process');
-                });
-
-            // Routes that use {id} (constrained to numbers)
-            Route::get('/{id}', [SampleController::class, 'show'])->whereNumber('id')->name('show');
-            Route::get('/{id}/preview', [SampleController::class, 'preview'])->whereNumber('id')->name('preview');
-            Route::get('/{id}/edit', [SampleController::class, 'edit'])->whereNumber('id')->name('edit');
-            Route::put('/{id}', [SampleController::class, 'update'])->whereNumber('id')->name('update');
-            Route::post('/{id}/approve', [SampleController::class, 'approve'])->whereNumber('id')->name('approve');
-            Route::post('/{id}/reject', [SampleController::class, 'reject'])->whereNumber('id')->name('reject');
-            Route::post('/{id}/archive', [SampleController::class, 'archive'])->whereNumber('id')->name('archive');
-            Route::get('/{id}/print-form', [SampleController::class, 'printForm'])->whereNumber('id')->name('print-form');
+    // Codification subgroup (clear naming and numeric constraints)
+    Route::prefix('codification')
+        ->name('codification.')
+        ->group(function () {
+            Route::get('/', [SampleController::class, 'codificationIndex'])->name('index');
+            Route::get('/{id}', [SampleController::class, 'showCodification'])->whereNumber('id')->name('show');
+            Route::get('/report', [SampleController::class, 'showReport'])->whereNumber('id')->name('report');
+            Route::post('/{id}', [SampleController::class, 'processCodification'])->whereNumber('id')->name('process');
         });
+
+    // Routes that use {id} (constrained to numbers)
+    Route::get('/{id}', [SampleController::class, 'show'])->whereNumber('id')->name('show');
+    Route::get('/{id}/preview', [SampleController::class, 'preview'])->whereNumber('id')->name('preview');
+    Route::get('/{id}/edit', [SampleController::class, 'edit'])->whereNumber('id')->name('edit');
+    Route::put('/{id}', [SampleController::class, 'update'])->whereNumber('id')->name('update');
+    Route::post('/{id}/approve', [SampleController::class, 'approve'])->whereNumber('id')->name('approve');
+    Route::post('/{id}/reject', [SampleController::class, 'reject'])->whereNumber('id')->name('reject');
+    Route::post('/{id}/archive', [SampleController::class, 'archive'])->whereNumber('id')->name('archive');
+    Route::post('/{id}/codify', [SampleController::class, 'codify'])->whereNumber('id')->name('codify');
+    Route::get('/{id}/print-form', [SampleController::class, 'printForm'])->whereNumber('id')->name('print-form');
+});
 
     // Parameter Management routes - Permission check in controller
     Route::prefix('parameters')
@@ -125,12 +128,8 @@ Route::middleware(['auth'])->group(function () {
         });
 
     // Placeholder routes for other modules with permission checks
-    Route::get('/assignments', function () {
-        if (!Auth::user()->hasPermission(3)) {
-            abort(403, 'Unauthorized access to Assignment module');
-        }
-        return view('assignments.index', ['module' => 'Assignment', 'moduleId' => 3]);
-    })->name('assignments.index');
+    Route::get('/assignments', [AssignmentController::class, 'index'])
+    ->name('assignments.index');
 
     Route::get('/testing', function () {
         if (!Auth::user()->hasPermission(4)) {
