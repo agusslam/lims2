@@ -1,8 +1,15 @@
 {
     "name": "lims/laboratory-management",
-    "type": "project", 
+    "type": "project",
     "description": "LIMS - Laboratory Information Management System for Laravel 12",
-    "keywords": ["laravel", "lims", "laboratory", "management", "iso17025", "laravel12"],
+    "keywords": [
+        "laravel",
+        "lims",
+        "laboratory",
+        "management",
+        "iso17025",
+        "laravel12"
+    ],
     "license": "MIT",
     "require": {
         "php": "^8.2",
@@ -10,7 +17,7 @@
         "laravel/tinker": "^2.9",
         "intervention/image": "^3.5",
         "maatwebsite/excel": "^3.1",
-        "barryvdh/laravel-dompdf": "^2.0",
+        "barryvdh/laravel-dompdf": "^3.1",
         "spatie/laravel-permission": "^6.0"
     },
     "require-dev": {
