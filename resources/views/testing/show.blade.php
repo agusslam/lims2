@@ -46,11 +46,11 @@
                     </tr>
                     <tr>
                         <td><strong>Pelanggan:</strong></td>
-                        <td>{{ $sample->sampleRequest->customer->contact_person }}</td>
+                        <td>{{ optional(optional($sample->sampleRequest)->customer)->contact_person ?? '— Tidak ada data pelanggan —' }}</td>
                     </tr>
                     <tr>
                         <td><strong>Perusahaan:</strong></td>
-                        <td>{{ $sample->sampleRequest->customer->company_name }}</td>
+                        <td>{{ optional(optional($sample->sampleRequest)->customer)->company_name ?? '-' }}</td>
                     </tr>
                     <tr>
                         <td><strong>Jenis Sampel:</strong></td>
@@ -126,19 +126,19 @@
                 </h6>
             </div>
             <div class="card-body">
-                @foreach($sample->tests->groupBy('testParameter.category') as $category => $tests)
+                @foreach($sample->parameters->groupBy('category') as $category => $parameters)
                 <div class="card mb-3">
                     <div class="card-header">
                         <h6 class="mb-0 text-primary">{{ $category }}</h6>
                     </div>
                     <div class="card-body">
-                        @foreach($tests as $test)
+                        @foreach($parameters  as $test)
                         <div class="card mb-3 border-{{ $test->status === 'completed' ? 'success' : ($test->status === 'testing' ? 'warning' : 'secondary') }}">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <div>
-                                    <strong>{{ $test->testParameter->name }}</strong>
-                                    @if($test->testParameter->unit)
-                                    <small class="text-muted">({{ $test->testParameter->unit }})</small>
+                                    <strong>{{ $test->name }}</strong>
+                                    @if($test->unit)
+                                    <small class="text-muted">({{ $test->unit }})</small>
                                     @endif
                                 </div>
                                 <span class="badge bg-{{ $test->status === 'completed' ? 'success' : ($test->status === 'testing' ? 'warning' : 'secondary') }}">
@@ -146,15 +146,15 @@
                                 </span>
                             </div>
                             <div class="card-body">
-                                @if($test->testParameter->method)
-                                <p class="mb-2"><small class="text-muted"><strong>Metode:</strong> {{ $test->testParameter->method }}</small></p>
+                                @if($test->method)
+                                <p class="mb-2"><small class="text-muted"><strong>Metode:</strong> {{ $test->method }}</small></p>
                                 @endif
                                 
                                 @if($test->status === 'completed')
                                 <!-- Display completed test results -->
                                 <div class="row">
                                     <div class="col-md-6">
-                                        <strong>Hasil:</strong> {{ $test->result_value }} {{ $test->testParameter->unit }}<br>
+                                        <strong>Hasil:</strong> {{ $test->result_value }} {{ $test->unit }}<br>
                                         @if($test->notes)
                                         <strong>Catatan:</strong> {{ $test->notes }}<br>
                                         @endif
@@ -183,7 +183,7 @@
                                 </div>
                                 @else
                                 <!-- Test input form -->
-                                <form action="{{ route('testing.store-result', $test->id) }}" method="POST" enctype="multipart/form-data">
+                                <form action="{{ route('testing.complete', $test->id) }}" method="POST" enctype="multipart/form-data">
                                     @csrf
                                     <div class="row">
                                         <div class="col-md-6">

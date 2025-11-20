@@ -20,13 +20,15 @@ class TestingController extends Controller
      */
     public function index()
     {
-        $samples = Sample::with(['sampleType', 'parameters', 'assignment.analyst'])
-            ->where('status', 'assigned')
-            ->whereHas('assignment', function ($query) {
-                if (Auth::user()->role === 'ANALYST') {
-                    $query->where('analyst_id', Auth::id());
-                }
-            })
+        $query = Sample::with(['sampleType', 'parameters', 'assignedAnalyst'])
+            ->where('status', 'assigned');
+
+        // Kalau login sebagai ANALYST, hanya lihat sampel yang ditugaskan ke dirinya
+        if (Auth::user()->role === 'ANALYST') {
+            $query->where('assigned_analyst_id', Auth::id());
+        }
+
+        $samples = $query
             ->orderBy('assigned_at', 'desc')
             ->paginate(20);
 
@@ -41,9 +43,8 @@ class TestingController extends Controller
         $sample = Sample::with([
             'sampleType', 
             'parameters', 
-            'assignment.analyst',
-            'results.parameter',
-            'files'
+            'assignedAnalyst',
+            'sampleRequest.customer',
         ])->findOrFail($id);
 
         // Check if user has access to this sample

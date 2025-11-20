@@ -136,4 +136,11 @@ class SampleRequest extends Model
         $sequence = str_pad($nextSequence, 6, '0', STR_PAD_LEFT);
         return "UNEJ{$year}{$month}{$sequence}";
     }
+
+    public function customer()
+    {
+        // asumsi nama kolom FK = customer_id
+        return $this->belongsTo(Customer::class, 'id');
+    }
 }
+

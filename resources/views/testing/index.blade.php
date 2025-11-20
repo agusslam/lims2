@@ -141,8 +141,12 @@
             
             <div class="card-body">
                 <div class="mb-3">
-                    <strong>Pelanggan:</strong> {{ $sample->sampleRequest->customer->contact_person }}<br>
-                    <strong>Jenis:</strong> {{ $sample->sampleType->name ?? $sample->custom_sample_type }}<br>
+                    <strong>Pelanggan: </strong>{{ $sample->sampleRequest?->customer?->contact_person
+        ?? $sample->customer_name
+        ?? '— Tidak ada data pelanggan —' }}<br>
+                    <strong>Perusahaan: </strong>{{ $sample->sampleRequest?->customer?->company_name
+        ?? $sample->company_name
+        ?? '— Tidak ada data perusahaan —' }}<br>
                     <strong>Quantity:</strong> {{ $sample->quantity }} sampel
                 </div>
 
@@ -186,11 +190,19 @@
             
             <div class="card-footer">
                 <div class="d-grid gap-2">
-                    <a href="{{ route('testing.show', $sample->id) }}" 
+                    <!-- <a href="{{ route('testing.start', $sample->id) }}" 
                        class="btn btn-{{ $sample->status === 'assigned' ? 'warning' : 'primary' }}">
                         <i class="fas fa-{{ $sample->status === 'assigned' ? 'play' : 'edit' }} me-2"></i>
                         {{ $sample->status === 'assigned' ? 'Mulai Pengujian' : 'Lanjutkan Pengujian' }}
-                    </a>
+                    </a> -->
+                    <form action="{{ route('testing.start', $sample->id) }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit"
+                            class="btn btn-{{ $sample->status === 'assigned' ? 'warning' : 'primary' }}">
+                            <i class="fas fa-{{ $sample->status === 'assigned' ? 'play' : 'edit' }} me-2"></i>
+                            {{ $sample->status === 'assigned' ? 'Mulai Pengujian' : 'Lanjutkan Pengujian' }}
+                        </button>
+                    </form>
                     
                     @if($sample->status === 'testing')
                     <div class="btn-group">

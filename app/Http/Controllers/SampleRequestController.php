@@ -756,6 +756,7 @@ public function update(Request $httpRequest, $id)
 }
 
 
+
     private function logAudit($action, $recordId, $details = [])
     {
         DB::table('audit_logs')->insert([
