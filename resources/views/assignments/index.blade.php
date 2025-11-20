@@ -136,8 +136,15 @@
             
             <div class="card-body">
                 <div class="mb-3">
-                    <strong>Pelanggan:</strong> {{ $sample->sampleRequest->customer->contact_person }}<br>
-                    <strong>Perusahaan:</strong> {{ $sample->sampleRequest->customer->company_name }}<br>
+                    <strong>Pelanggan:</strong>
+{{ optional(optional($sample->sampleRequest)->customer)->contact_person
+   ?? $sample->customer_name
+   ?? '— Tidak ada data pelanggan —' }}<br>
+
+<strong>Perusahaan:</strong>
+{{ optional(optional($sample->sampleRequest)->customer)->company_name
+   ?? $sample->company_name
+   ?? '— Tidak ada data perusahaan —' }}<br>
                     <strong>Jenis Sampel:</strong> {{ $sample->sampleType->name ?? $sample->custom_sample_type }}<br>
                     <strong>Quantity:</strong> {{ $sample->quantity }} sampel
                 </div>
@@ -180,7 +187,7 @@
             </div>
             
             <div class="card-footer">
-                <form action="{{ route('samples.assign', $sample->id) }}" method="POST">
+                <form action="{{ route('assignments.assign', $sample->id) }}" method="POST">
                     @csrf
                     <div class="mb-3">
                         <label class="form-label">Pilih Analis:</label>
@@ -200,11 +207,28 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label">Catatan Penugasan:</label>
-                        <textarea name="assignment_notes" class="form-control" rows="2" 
-                                  placeholder="Catatan khusus untuk analis..."></textarea>
-                    </div>
-                    
+    <label class="form-label">Prioritas</label>
+    <select name="priority" class="form-select" required>
+        <option value="">-- Pilih Prioritas --</option>
+        <option value="low">Rendah</option>
+        <option value="normal">Normal</option>
+        <option value="high">Tinggi</option>
+    </select>
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Deadline</label>
+    <input type="date" name="deadline" class="form-control" required>
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Catatan Penugasan:</label>
+    <textarea name="assignment_notes" class="form-control" rows="2"
+              placeholder="Catatan khusus untuk analis..."></textarea>
+</div>
+
+
+                                        
                     <div class="d-grid gap-2 d-md-flex">
                         <button type="submit" class="btn btn-primary flex-fill">
                             <i class="fas fa-user-plus me-2"></i>

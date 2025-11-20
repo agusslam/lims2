@@ -33,7 +33,10 @@ class Sample extends Model
         'codified_at',
         'codification_notes',
         'special_requirements',
-        'rejected_codification_at'
+        'rejected_codification_at',
+        'assigned_analyst_id',
+        'deadline',
+        'assignment_notes', 
     ];
 
     protected $casts = [

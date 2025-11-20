@@ -151,6 +151,7 @@ Route::prefix('samples')
         Route::post('/{id}/codify', [SampleController::class, 'processCodification'])->whereNumber('id')->name('codify');
 
         Route::get('/{id}/print-form', [SampleController::class, 'printForm'])->whereNumber('id')->name('print-form');
+        Route::get('/{id}/verification-form', [SampleController::class, 'printVerificationForm'])->whereNumber('id')->name('verification-form');
     });
 
 
@@ -181,12 +182,19 @@ Route::prefix('samples')
     Route::get('/assignments', [AssignmentController::class, 'index'])
     ->name('assignments.index');
 
-    Route::get('/testing', function () {
-        if (!Auth::user()->hasPermission(4)) {
-            abort(403, 'Unauthorized access to Testing module');
-        }
-        return view('placeholder', ['module' => 'Testing', 'moduleId' => 4]);
-    })->name('testing.index');
+    Route::post('/assignments/{sample}', [AssignmentController::class, 'assign'])
+    ->whereNumber('sample')
+    ->name('assignments.assign');
+
+    // Route::get('/testing', function () {
+    //     if (!Auth::user()->hasPermission(4)) {
+    //         abort(403, 'Unauthorized access to Testing module');
+    //     }
+    //     return view('placeholder', ['module' => 'Testing', 'moduleId' => 4]);
+    // })->name('testing.index');
+
+    Route::get('/testing', [TestingController::class, 'index'])
+    ->name('testing.index');
 
     Route::get('/reviews', function () {
         if (!Auth::user()->hasPermission(5)) {

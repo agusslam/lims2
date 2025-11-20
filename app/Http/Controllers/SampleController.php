@@ -406,6 +406,13 @@ public function processCodification(Request $request, $id)
         return view('samples.print-form', compact('sample'));
     }
 
+    public function printVerificationForm($id)
+{
+    $sample = Sample::with(['sampleType', 'parameters', 'registeredBy'])->findOrFail($id);
+
+    return view('samples.print-verification-form', compact('sample'));
+}
+
     /**
      * Log audit trail
      */

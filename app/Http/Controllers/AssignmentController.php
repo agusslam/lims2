@@ -118,8 +118,13 @@ class AssignmentController extends Controller
 
             // Update sample status
             $sample->update([
-                'status' => 'assigned',
-                'assigned_at' => now()
+                'status'              => 'assigned',
+            'assigned_analyst_id' => $validated['analyst_id'],
+            'assigned_to' => $validated['analyst_id'],
+            'assigned_by'         => Auth::id(),
+            'assigned_at'         => now(),
+            'deadline'            => $validated['deadline'],
+            'assignment_notes'    => $validated['assignment_notes'] ?? null,
             ]);
             
             $analyst = User::find($validated['analyst_id']);
