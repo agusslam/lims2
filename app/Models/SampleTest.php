@@ -5,22 +5,28 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+
 class SampleTest extends Model
 {
     use HasFactory;
+
+    protected $table = 'sample_tests';
 
     protected $fillable = [
         'sample_id',
         'test_parameter_id',
         'result',
+        'result_value',
         'notes',
         'method_used',
         'tested_by',
-        'tested_at'
+        'tested_at',
+        'status'
     ];
 
     protected $casts = [
-        'tested_at' => 'datetime'
+        'tested_at' => 'datetime',
+        'instrument_files' => 'array',
     ];
 
     /**
@@ -36,7 +42,7 @@ class SampleTest extends Model
      */
     public function parameter()
     {
-        return $this->belongsTo(TestParameter::class, 'test_parameter_id');
+        return $this->belongsTo(Parameter::class, 'parameters_id'); 
     }
 
     /**

@@ -71,40 +71,40 @@ class Sample extends Model
     }
 
 
-    public function getTestsAttribute()
-{
-    // Jika Sample asli -> gunakan relasi parameters sebagai sumber test
-    if ($this->relationLoaded('parameters')) {
-        return $this->parameters->map(function ($param) {
-            return (object)[
-                'testParameter' => $param,
-            ];
-        });
-    }
+//     public function getTestsAttribute()
+// {
+//     // Jika Sample asli -> gunakan relasi parameters sebagai sumber test
+//     if ($this->relationLoaded('parameters')) {
+//         return $this->parameters->map(function ($param) {
+//             return (object)[
+//                 'testParameter' => $param,
+//             ];
+//         });
+//     }
 
-    // Jika relasi belum diload, load dulu
-    if (method_exists($this, 'parameters')) {
-        $this->load('parameters');
-        return $this->parameters->map(function ($param) {
-            return (object)[
-                'testParameter' => $param,
-            ];
-        });
-    }
+//     // Jika relasi belum diload, load dulu
+//     if (method_exists($this, 'parameters')) {
+//         $this->load('parameters');
+//         return $this->parameters->map(function ($param) {
+//             return (object)[
+//                 'testParameter' => $param,
+//             ];
+//         });
+//     }
 
-    // Jika ini pseudo-object (fallback) dari SampleRequest
-    // dan sudah memiliki properti tests, kembalikan apa adanya
-    if (property_exists($this, 'tests') && is_array($this->tests)) {
-        return collect($this->tests);
-    }
+//     // Jika ini pseudo-object (fallback) dari SampleRequest
+//     // dan sudah memiliki properti tests, kembalikan apa adanya
+//     if (property_exists($this, 'tests') && is_array($this->tests)) {
+//         return collect($this->tests);
+//     }
 
-    if (property_exists($this, 'tests') && $this->tests instanceof \Illuminate\Support\Collection) {
-        return $this->tests;
-    }
+//     if (property_exists($this, 'tests') && $this->tests instanceof \Illuminate\Support\Collection) {
+//         return $this->tests;
+//     }
 
-    // Default fallback: kembalikan collection kosong
-    return collect([]);
-}
+//     // Default fallback: kembalikan collection kosong
+//     return collect([]);
+// }
     /**
      * Get the parameters for this sample (using existing sample_tests relationship)
      */
@@ -117,9 +117,6 @@ class Sample extends Model
             'parameters_id'
         )->withPivot('result', 'notes', 'method_used', 'tested_by', 'tested_at');
     }
-
-    
-
     /**
      * Get test results for this sample (using existing sample_tests table)
      */
@@ -143,6 +140,7 @@ class Sample extends Model
     {
         return $this->hasMany(SampleFile::class);
     }
+    
 
     /**
      * Get reviews for this sample
@@ -233,4 +231,16 @@ class Sample extends Model
         }
         return 0;
     }
+
+/*************  ✨ Windsurf Command ⭐  *************/
+/**
+ * Get all tests associated with this sample
+ *
+ * @return \Illuminate\Database\Eloquent\Relations\HasMany
+ */
+/*******  498058e7-2f2f-4f6e-b803-0192d716a5fd  *******/
+    public function tests()
+{
+    return $this->hasMany(SampleTest::class);
+}
 }

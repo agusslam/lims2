@@ -175,7 +175,7 @@ class SampleRequestController extends Controller
             'quantity' => $data['quantity'],
             'customer_requirements' => $data['customer_requirements'] ?? null,
             'customer_id' => $customer ? $customer->id : null,
-            'tracking_code' => 'TRK-'.strtoupper(uniqid()),
+            'tracking_code' => 'UNEJ-'.strtoupper(uniqid()),
             'status' => 'pending',
             'submitted_at' => now(),
         ];

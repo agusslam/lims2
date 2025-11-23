@@ -195,7 +195,7 @@
                         <i class="fas fa-{{ $sample->status === 'assigned' ? 'play' : 'edit' }} me-2"></i>
                         {{ $sample->status === 'assigned' ? 'Mulai Pengujian' : 'Lanjutkan Pengujian' }}
                     </a> -->
-                    <form action="{{ route('testing.start', $sample->id) }}" method="POST" class="d-inline">
+                    <form action="{{ route('testing.show', $sample->id) }}" method="GET" class="d-inline">
                         @csrf
                         <button type="submit"
                             class="btn btn-{{ $sample->status === 'assigned' ? 'warning' : 'primary' }}">

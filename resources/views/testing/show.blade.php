@@ -1,3 +1,5 @@
+use Illuminate\Support\Facades\Storage;
+
 @extends('layouts.app')
 
 @section('title', 'Pengujian Sampel')
@@ -7,7 +9,7 @@
     <div>
         <h4 class="mb-1">Pengujian Sampel: {{ $sample->sample_code }}</h4>
         <p class="text-muted mb-0">
-            Status: 
+            Status:
             <span class="badge bg-{{ $sample->status === 'assigned' ? 'warning' : 'primary' }}">
                 {{ $sample->status === 'assigned' ? 'Ditugaskan' : 'Sedang Diuji' }}
             </span>
@@ -16,7 +18,7 @@
     <div>
         @if($sample->status === 'assigned')
         <button class="btn btn-warning me-2" onclick="startTesting()">
-            <i class="fas fa-play me-2"></i>Mulai Pengujian
+            <i class="fas fa-play me-2"></i>Kirim Pengujian
         </button>
         @endif
         <a href="{{ route('testing.data-form', $sample->id) }}" class="btn btn-outline-secondary me-2" target="_blank">
@@ -46,11 +48,11 @@
                     </tr>
                     <tr>
                         <td><strong>Pelanggan:</strong></td>
-                        <td>{{ optional(optional($sample->sampleRequest)->customer)->contact_person ?? '— Tidak ada data pelanggan —' }}</td>
+                        <td>{{ $sample->customer_name }}</td>
                     </tr>
                     <tr>
                         <td><strong>Perusahaan:</strong></td>
-                        <td>{{ optional(optional($sample->sampleRequest)->customer)->company_name ?? '-' }}</td>
+                        <td>{{ $sample->company_name }}</td>
                     </tr>
                     <tr>
                         <td><strong>Jenis Sampel:</strong></td>
@@ -90,21 +92,21 @@
             </div>
             <div class="card-body">
                 @php
-                    $totalTests = $sample->tests->count();
-                    $completedTests = $sample->tests->where('status', 'completed')->count();
-                    $progress = $totalTests > 0 ? ($completedTests / $totalTests) * 100 : 0;
+                $totalTests = $sample->tests->count();
+                $completedTests = $sample->tests->where('status', 'completed')->count();
+                $progress = $totalTests > 0 ? ($completedTests / $totalTests) * 100 : 0;
                 @endphp
-                
+
                 <div class="text-center mb-3">
                     <div class="progress-circle" data-progress="{{ $progress }}">
                         <span>{{ round($progress) }}%</span>
                     </div>
                 </div>
-                
+
                 <p class="text-center mb-2">
                     <strong>{{ $completedTests }}/{{ $totalTests }}</strong> parameter selesai
                 </p>
-                
+
                 @if($progress === 100)
                 <div class="d-grid">
                     <button class="btn btn-success" onclick="completeTesting()">
@@ -132,95 +134,111 @@
                         <h6 class="mb-0 text-primary">{{ $category }}</h6>
                     </div>
                     <div class="card-body">
-                        @foreach($parameters  as $test)
-                        <div class="card mb-3 border-{{ $test->status === 'completed' ? 'success' : ($test->status === 'testing' ? 'warning' : 'secondary') }}">
+                        @foreach($parameters as $parameter)
+                        @php
+                        // cari record sample_tests untuk parameter ini
+                        $testRecord = $sample->tests->firstWhere('parameters_id', $parameter->id);
+                        // kalau nama kolomnya "parameter_id", ganti 'parameters_id' -> 'parameter_id'
+                        @endphp
+
+                        @php
+                        $status = $testRecord->status ?? 'pending';
+                        @endphp
+
+                        <div
+                            class="card mb-3 border-{{ $status === 'completed' ? 'success' : ($status === 'testing' ? 'warning' : 'secondary') }}">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <div>
-                                    <strong>{{ $test->name }}</strong>
-                                    @if($test->unit)
-                                    <small class="text-muted">({{ $test->unit }})</small>
+                                    <strong>{{ $parameter->name }}</strong>
+                                    @if($parameter->unit)
+                                    <small class="text-muted">({{ $parameter->unit }})</small>
                                     @endif
                                 </div>
-                                <span class="badge bg-{{ $test->status === 'completed' ? 'success' : ($test->status === 'testing' ? 'warning' : 'secondary') }}">
-                                    {{ ucfirst($test->status) }}
+                                <span
+                                    class="badge bg-{{ $status === 'completed' ? 'success' : ($status === 'testing' ? 'warning' : 'secondary') }}">
+                                    {{ ucfirst($status) }}
                                 </span>
                             </div>
+
                             <div class="card-body">
-                                @if($test->method)
-                                <p class="mb-2"><small class="text-muted"><strong>Metode:</strong> {{ $test->method }}</small></p>
-                                @endif
-                                
-                                @if($test->status === 'completed')
-                                <!-- Display completed test results -->
+                                {{-- kalau sudah completed, pakai data dari $testRecord --}}
+                                @if($status === 'completed' && $testRecord)
                                 <div class="row">
                                     <div class="col-md-6">
-                                        <strong>Hasil:</strong> {{ $test->result_value }} {{ $test->unit }}<br>
-                                        @if($test->notes)
-                                        <strong>Catatan:</strong> {{ $test->notes }}<br>
+                                        <strong>Hasil:</strong> {{ $testRecord->result_value }}
+                                        {{ $parameter->unit }}<br>
+                                        @if($testRecord->notes)
+                                        <strong>Catatan:</strong> {{ $testRecord->notes }}<br>
                                         @endif
                                         <small class="text-muted">
-                                            Diuji: {{ $test->tested_at ? $test->tested_at->format('d/m/Y H:i') : '-' }}
+                                            Diuji:
+                                            {{ $testRecord->tested_at ? $testRecord->tested_at->format('d/m/Y H:i') : '-' }}
                                         </small>
                                     </div>
                                     <div class="col-md-6">
-                                        @if($test->instrument_files && count($test->instrument_files) > 0)
+                                        @if(!empty($testRecord->instrument_files))
                                         <strong>File Instrumen:</strong><br>
-                                        @foreach($test->instrument_files as $index => $file)
+                                        @foreach($testRecord->instrument_files as $index => $file)
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <small>
                                                 <i class="fas fa-file me-1"></i>
-                                                {{ $file['filename'] }}
-                                                <span class="text-muted">({{ number_format($file['size']/1024, 1) }} KB)</span>
+                                                <a href="{{ asset('storage/' . $file['path']) }}" target="_blank">
+                                                    {{ $file['filename'] ?? basename($file['path']) }}
+                                                </a>
+                                                @if(!empty($file['size']))
+                                                <span class="text-muted">
+                                                    ({{ number_format($file['size']/1024, 1) }} KB)
+                                                </span>
+                                                @endif
                                             </small>
-                                            <button type="button" class="btn btn-outline-danger btn-sm" 
-                                                    onclick="deleteFile({{ $test->id }}, {{ $index }})">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
                                         </div>
                                         @endforeach
                                         @endif
                                     </div>
                                 </div>
                                 @else
-                                <!-- Test input form -->
-                                <form action="{{ route('testing.complete', $test->id) }}" method="POST" enctype="multipart/form-data">
+                                <form action="{{ route('testing.saveResults', $parameter->id) }}" method="POST"
+                                    enctype="multipart/form-data">
                                     @csrf
                                     <div class="row">
                                         <div class="col-md-6">
                                             <div class="mb-3">
-                                                <label class="form-label">Hasil Pengujian <span class="text-danger">*</span></label>
-                                                <input type="text" name="result_value" class="form-control" 
-                                                       placeholder="Masukkan hasil pengujian" required>
+                                                <label class="form-label">Hasil Pengujian <span
+                                                        class="text-danger">*</span></label>
+                                                <input type="text" name="result_value" class="form-control"
+                                                    placeholder="Masukkan hasil pengujian" required>
                                             </div>
                                         </div>
                                         <div class="col-md-6">
                                             <div class="mb-3">
                                                 <label class="form-label">Catatan</label>
-                                                <textarea name="notes" class="form-control" rows="2" 
-                                                          placeholder="Catatan pengujian (opsional)"></textarea>
+                                                <textarea name="notes" class="form-control" rows="2"
+                                                    placeholder="Catatan pengujian (opsional)"></textarea>
                                             </div>
                                         </div>
                                     </div>
-                                    
                                     <div class="mb-3">
                                         <label class="form-label">Upload File Instrumen</label>
-                                        <div class="file-upload-area" ondrop="dropHandler(event, this);" ondragover="dragOverHandler(event);">
-                                            <input type="file" name="instrument_files[]" class="form-control" multiple 
-                                                   accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx">
+                                        <div class="file-upload-area" ondrop="dropHandler(event, this);"
+                                            ondragover="dragOverHandler(event);">
+                                            <input type="file" name="instrument_files[]" class="form-control" multiple
+                                                accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx">
                                             <div class="upload-placeholder">
                                                 <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-2"></i>
                                                 <p class="text-muted">Drag & drop file atau klik untuk browse</p>
-                                                <small class="text-muted">PDF, Excel, Word, Image (Max: 10MB per file)</small>
+                                                <small class="text-muted">PDF, Excel, Word, Image (Max: 10MB per
+                                                    file)</small>
                                             </div>
                                         </div>
                                         <div class="uploaded-files mt-2"></div>
                                     </div>
-                                    
+
                                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                                         <button type="submit" class="btn btn-primary">
                                             <i class="fas fa-save me-2"></i>Simpan Hasil
                                         </button>
                                     </div>
+
                                 </form>
                                 @endif
                             </div>
@@ -301,74 +319,76 @@
 function startTesting() {
     if (confirm('Mulai pengujian untuk sampel ini?')) {
         fetch(`/testing/{{ $sample->id }}/start`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert('Error: ' + (data.message || 'Gagal memulai pengujian'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Terjadi kesalahan sistem');
-        });
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.message || 'Gagal memulai pengujian'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Terjadi kesalahan sistem');
+            });
     }
 }
 
 function completeTesting() {
     if (confirm('Apakah Anda yakin semua pengujian sudah selesai dan hasilnya benar?')) {
         fetch(`/testing/{{ $sample->id }}/complete`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Pengujian berhasil diselesaikan dan dikirim untuk review');
-                location.href = '{{ route("testing.index") }}';
-            } else {
-                alert('Error: ' + (data.message || 'Gagal menyelesaikan pengujian'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Terjadi kesalahan sistem');
-        });
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Pengujian berhasil diselesaikan dan dikirim untuk review');
+                    location.href = '{{ route("testing.index") }}';
+                } else {
+                    alert('Error: ' + (data.message || 'Gagal menyelesaikan pengujian'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Terjadi kesalahan sistem');
+            });
     }
 }
 
 function deleteFile(testId, fileIndex) {
     if (confirm('Hapus file ini?')) {
         fetch(`/testing/file/${testId}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-            },
-            body: JSON.stringify({ file_index: fileIndex })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert('Error: Gagal menghapus file');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Terjadi kesalahan sistem');
-        });
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                body: JSON.stringify({
+                    file_index: fileIndex
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: Gagal menghapus file');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Terjadi kesalahan sistem');
+            });
     }
 }
 
@@ -381,18 +401,18 @@ function dragOverHandler(ev) {
 function dropHandler(ev, element) {
     ev.preventDefault();
     element.classList.remove('dragover');
-    
+
     const files = ev.dataTransfer.files;
     const input = element.querySelector('input[type="file"]');
     input.files = files;
-    
+
     displayUploadedFiles(files, element);
 }
 
 function displayUploadedFiles(files, container) {
     const filesContainer = container.parentElement.querySelector('.uploaded-files');
     filesContainer.innerHTML = '';
-    
+
     Array.from(files).forEach((file, index) => {
         const fileElement = document.createElement('div');
         fileElement.className = 'alert alert-info alert-dismissible fade show';
@@ -430,5 +450,34 @@ document.querySelectorAll('input, textarea').forEach(element => {
         }, 5000);
     });
 });
+
+function addInstrumentInput(testId) {
+    const container = document.getElementById(`instrument-files-container-${testId}`);
+    if (!container) return;
+
+    // cari upload pertama sebagai template
+    const first = container.querySelector('.single-upload') || container.querySelector('.file-upload-area');
+    if (!first) return;
+
+    const clone = first.cloneNode(true);
+
+    // kosongkan nilai input file
+    const fileInput = clone.querySelector('input[type="file"]');
+    if (fileInput) {
+        fileInput.value = '';
+    }
+
+    // kalau kamu tidak perlu mengubah teks, blok ini boleh DIHAPUS
+    // atau dibikin aman seperti di bawah
+    const placeholder = clone.querySelector('.upload-placeholder');
+    if (placeholder) {
+        const p = placeholder.querySelector('p');
+        if (p) {
+            p.innerText = 'Pilih file instrumen lainnya';
+        }
+    }
+
+    container.appendChild(clone);
+}
 </script>
 @endpush

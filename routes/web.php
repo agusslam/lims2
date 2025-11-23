@@ -130,20 +130,7 @@ Route::middleware(['auth'])->group(function () {
 
         // Placeholder routes for other modules with permission checks
         Route::get('/assignments', [AssignmentController::class, 'index'])->name('assignments.index');
-        Route::post('/assignments/{sample}', [AssignmentController::class, 'assign'])->whereNumber('sample')->name('assignments.assign');
-
-        // Route::get('/testing', function () {
-        //     if (!Auth::user()->hasPermission(4)) {
-        //         abort(403, 'Unauthorized access to Testing module');
-        //     }
-        //     return view('placeholder', ['module' => 'Testing', 'moduleId' => 4]);
-        // })->name('testing.index');
-
-        // Route::get('/testing', [TestingController::class, 'index'])->name('testing.index');
-
-        // Route::get('/testing/{sample}', [TestingController::class, 'show'])->whereNumber('id')->name('testing.show');
-        // Route::get('/testing/{sample}', [TestingController::class, 'startTesting'])->whereNumber('id')->name('testing.startTesting');
-        // Route::get('/testing/{id}', [TestingController::class, 'show'])->name('testing.show');
+        Route::post('/assignments/{sample}', [AssignmentController::class, 'assign'])->whereNumber('sample')->name('assignments.assign');    
 
         Route::prefix('testing')->name('testing.')->group(function () {        
             Route::get('/', [TestingController::class, 'index'])->name('index');
@@ -155,7 +142,10 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/{id}/data-form', [TestingController::class, 'printDataForm'])->name('data-form');
             // Menyelesaikan pengujian
             Route::post('/{id}/complete', [TestingController::class, 'completeTesting'])->name('complete');
+            // Simpan Result
+            Route::post('/{id}/results', [TestingController::class, 'saveResults'])->name('saveResults');
     });
+
 
     Route::get('/reviews', function () {
         if (!Auth::user()->hasPermission(5)) {

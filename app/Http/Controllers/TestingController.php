@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Models\SampleTest;
 use App\Models\AuditLog;
-use App\Models\SampleResult;
+// use App\Models\SampleResult;
 
 class TestingController extends Controller
 {
@@ -43,6 +43,7 @@ class TestingController extends Controller
         $sample = Sample::with([
             'sampleType', 
             'parameters', 
+            'tests',
             'assignedAnalyst',
             'sampleRequest.customer',
         ])->findOrFail($id);
@@ -89,9 +90,10 @@ class TestingController extends Controller
     /**
      * Save test results
      */
-    public function saveResults(Request $request, $id)
+    public function saveResults(Request $request, $parameterId)
     {
-        $sample = Sample::with(['parameters'])->findOrFail($id);
+        $sampleTest = SampleTest::where('parameters_id', $parameterId)->firstOrFail();
+        $sample = $sampleTest->sample;
         
         // Check authorization
         if (Auth::user()->role === 'ANALYST' && 
@@ -99,47 +101,71 @@ class TestingController extends Controller
             abort(403);
         }
 
+        // $validated = $request->validate([
+        //     'results' => 'required|array',
+        //     'results.*' => 'required|array', 
+        //     'results.*.parameter_id' => 'required|exists:parameters,id',
+        //     'results.*.result_value' => 'required|string',
+        //     'results.*.unit' => 'required|string',
+        //     'results.*.method' => 'nullable|string',
+        //     'results.*.notes' => 'nullable|string',
+        //     'testing_notes' => 'nullable|string|max:2000'
+        // ]);
+
         $validated = $request->validate([
-            'results' => 'required|array',
-            'results.*' => 'required|array',
-            'results.*.parameter_id' => 'required|exists:parameters,id',
-            'results.*.result_value' => 'required|string',
-            'results.*.unit' => 'required|string',
-            'results.*.method' => 'nullable|string',
-            'results.*.notes' => 'nullable|string',
-            'testing_notes' => 'nullable|string|max:2000'
-        ]);
+        'result_value' => 'required|string',
+        'notes'        => 'nullable|string',
+        'instrument_files.*' => 'nullable|file|max:10240|mimes:pdf,jpg,jpeg,png,xlsx,xls,doc,docx',
+    ]);
 
-        DB::transaction(function () use ($sample, $validated) {
-            // Save or update results
-            foreach ($validated['results'] as $resultData) {
-                SampleResult::updateOrCreate([
-                    'sample_id' => $sample->id,
-                    'parameter_id' => $resultData['parameter_id']
-                ], [
-                    'result_value' => $resultData['result_value'],
-                    'unit' => $resultData['unit'],
-                    'method' => $resultData['method'] ?? null,
-                    'notes' => $resultData['notes'] ?? null,
-                    'tested_by' => Auth::id(),
-                    'tested_at' => now()
-                ]);
-            }
-            
-            // Update sample
-            $sample->update([
-                'testing_notes' => $validated['testing_notes']
-            ]);
-            
-            // Log audit trail
-            $this->logAudit('results_saved', $sample->id, [
-                'tested_by' => Auth::user()->name,
-                'parameters_count' => count($validated['results'])
-            ]);
-        });
+        DB::transaction(function () use ($sample, $sampleTest, $validated, $request, $parameterId) {
+    // SIMPAN HASIL DI TABEL sample_tests
+    $sampleTest->update([
+        'result_value' => $validated['result_value'],
+        'notes'        => $validated['notes'] ?? null,
+        'tested_by'    => Auth::id(),
+        'tested_at'    => now(),
+        'status'       => 'completed',
+    ]);
 
-        return redirect()->back()
-            ->with('success', 'Hasil pengujian berhasil disimpan');
+    // === SIMPAN FILE INSTRUMEN (kalau tabel punya kolom JSON 'instrument_files') ===
+    if ($request->hasFile('instrument_files')) {
+        $uploaded = [];
+
+        foreach ($request->file('instrument_files') as $file) {
+            if (!$file) continue;
+
+            $path = $file->store(
+                'uploads/samples/' . $sample->sample_code,
+                'public'
+            );
+
+            $uploaded[] = [
+                'filename'    => $file->getClientOriginalName(),
+                'path'        => $path,
+                'size'        => $file->getSize(),
+                'mime'        => $file->getClientMimeType(),
+                'uploaded_at' => now()->toDateTimeString(),
+            ];
+        }
+
+        if ($uploaded) {
+            // pastikan di model SampleTest ada:
+            // protected $casts = ['instrument_files' => 'array'];
+            $existing = $sampleTest->instrument_files ?? [];
+            $sampleTest->instrument_files = array_merge($existing, $uploaded);
+            $sampleTest->save();
+        }
+    }
+
+    // AUDIT LOG
+    $this->logAudit('results_saved', $sample->id, [
+        'tested_by'    => Auth::user()->name,
+        'parameter_id' => $parameterId,
+    ]); 
+});
+
+    return back()->with('success', 'Hasil pengujian berhasil disimpan');
     }
 
     /**
@@ -202,7 +228,7 @@ class TestingController extends Controller
      */
     public function completeTesting($id)
     {
-        $sample = Sample::with(['results', 'parameters'])->findOrFail($id);
+        $sample = Sample::with(['tests', 'parameters'])->findOrFail($id);
         
         // Check authorization
         if (Auth::user()->role === 'ANALYST' && 
@@ -212,13 +238,18 @@ class TestingController extends Controller
 
         // Validate all parameters have results
         $missingResults = $sample->parameters->filter(function ($parameter) use ($sample) {
-            return !$sample->results->where('parameter_id', $parameter->id)->count();
-        });
+        return !$sample->tests
+            ->where('parameters_id', $parameter->id)  // kolom yg benar di sample_tests
+            ->whereNotNull('result_value')
+            ->count();
+    });
 
         if ($missingResults->count() > 0) {
-            return redirect()->back()
-                ->with('error', 'Semua parameter harus memiliki hasil pengujian');
-        }
+        return response()->json([
+            'success' => false,
+            'message' => 'Semua parameter harus memiliki hasil pengujian',
+        ], 422);
+    }
 
         DB::transaction(function () use ($sample) {
             $sample->update([
@@ -233,8 +264,10 @@ class TestingController extends Controller
             ]);
         });
 
-        return redirect()->route('testing.index')
-            ->with('success', 'Pengujian selesai dan dikirim untuk review teknis');
+        return response()->json([
+        'success' => true,
+        'message' => 'Pengujian selesai dan dikirim untuk review teknis',
+    ]);
     }
 
     /**
